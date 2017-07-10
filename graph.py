@@ -1,6 +1,5 @@
 import random
 import copy
-import random
 
 class Graph:
     '''An abstract data structure representing a Graph.'''

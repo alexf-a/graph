@@ -1,5 +1,6 @@
 import random
 import copy
+import logging
 
 class Graph:
     '''An abstract data structure representing a Graph.'''
@@ -16,11 +17,23 @@ class Graph:
     
     def add_node(self, v):
         '''Add node v to this Graph'''
-        raise NotImplementedError("Requires subclass implementation")
+        if v in self._dct.keys():
+            logging.info("Node " + str(v) + " already in this Graph")
+            return
+        self._dct[v] = []
     
     def remove_node(self, v):
         '''Remove node v from this Graph and return its neighbours'''
-        raise NotImplementedError("Requires subclass implementation")
+        try:
+            result = self._dct.pop(v, None)
+            if result:
+                for vtx in self.nodes():
+                    if vtx in self._dct[vtx]:
+                        result.append(vtx)
+                        self._dct[vtx].remove(v)  
+            return set(result)
+        except KeyError:
+            return
         
     
     def edges(self, v=None):
@@ -32,22 +45,17 @@ class Graph:
        '''  
         raise NotImplementedError("Requires subclass implementation")
   
-    def nodes(self, v=None):
-        '''Return a set of all nodes in this Graph that are adjacent to vertex v. 
-         Includes all nodes if v is None:
-         
-         args:
-         v -- str of v's contents
-         '''  
-        raise NotImplementedError("Requires subclass implementation")
+    def nodes(self):
+        '''Return a set of all nodes in this Graph'''  
+        return set(self._dct.keys())
       
         
 
-class UGraph:
+class UGraph(Graph):
     ''' A data structure representing an undirected graph.'''
     def __init__(self, dct):
         ''' Initialize this UGraph with a dictionary dct '''
-        self._dct = dct
+        Graph.__init__(self, dct)
         
     def add_edge(self, v, w):
         '''Add an edge in this Graph from v to w'''
@@ -61,15 +69,16 @@ class UGraph:
         self._dct[v].remove(w)
         self._dct[w].remove(v)
     
-    def add_node(self, v):
-        '''Add node v to this Graph'''
-        if v in self._dct.keys():
-            return
-        self._dct[v] = []
-    
     def remove_node(self, v):
         '''Remove node v from this Graph and return its neighbours'''
-        self._dct.delete(v)
+        try:
+            result = self._dct.pop(v, None)
+        except KeyError:
+            return
+        if result:
+            for vtx in self._dct.keys():
+                self._dct[vtx].remove(v)
+        return result
         
     
     def edges(self, v=None):
@@ -92,18 +101,9 @@ class UGraph:
                         res.append((vtx, adj))
         return set(res)
     
-    def nodes(self, v=None):
-        '''Return a set of all nodes in this UGraph that are adjacent to node v. 
-           Includes all nodes if v is None:
-           
-           args:
-           v -- str of v's contents
-        '''
-        res = []
-        if v:
-            return set(self._dct[v])
-        else:
-            return set(self._dct.keys())
+    def neighbours(self, v):
+        '''Return a set of all neighbours in this UGraph of node v. '''
+        return set(self._dct[v])
         
     def is_connected(self):
         '''Return whether this UGraph is connected.'''
@@ -113,7 +113,7 @@ class UGraph:
         while q:
             curr = q.pop(0)
             visited.append(curr)
-            for adj in self.nodes(curr):
+            for adj in self._dct[curr]:
                 if adj not in visited:
                     q.append(adj)
         if set(visited) == set(self.nodes()):
@@ -122,12 +122,12 @@ class UGraph:
             return False
     
     def has_eulerian_path(self):
-        '''Return whether Graph self has a Eulerian path'''
+        '''Return whether UGraph self has a Eulerian path'''
         if not self.is_connected():
             return False
         count = 0
         for v in self.nodes():
-            if len(self.nodes(v))%2 != 0:
+            if len(self.neighbours(v))%2 != 0:
                 count+=1
                 if count > 2: #Return early if odd degree v's surpasses 2
                     return False
@@ -137,19 +137,22 @@ class UGraph:
             return False
         
     def has_eulerian_circuit(self):
-        '''Return whether Graph self has a Eulerian circuit.'''
+        '''Return whether UGraph self has a Eulerian circuit.'''
         if not self.is_connected():
             return False
         for v in self.nodes():
-            if len(self.nodes(v))%2 != 0:
+            if len(self.neighbours(v))%2 != 0:
                 return False
         return True
     
     def eulerian_circuit(self, v):
         '''Return a Eulerian circuit list beginning at vertex v, if one exists.
+         Raise NodeError if v not in this UGraph
         
         Uses Hierholzer's algorithm.
         '''
+        if v not in self.nodes():
+            raise NodeError("Node " + str(v) + " is not in this UGraph")
         result = []
         if not self.has_eulerian_circuit():
             return result
@@ -163,7 +166,7 @@ class UGraph:
             #looking for a cycle...
             while nbr != start:
                 w = q[len(q)-1]
-                nbr = random.sample(cpy.nodes(w), 1)[0]
+                nbr = random.sample(cpy.neighbours(w), 1)[0]
                 q.append(nbr)
                 cpy.remove_edge(w, nbr)
             
@@ -186,11 +189,91 @@ class UGraph:
                     break
         
         return result
-        
-        
     
-'''        
+    
+class DGraph(Graph):
+    '''A data structure representing a directed graph.'''
+    def __init__(self, dct):
+        '''Initialize this DGraph with a dictionary dct'''
+        Graph.__init__(self, dct)
+        
+    def add_edge(self, v, w):
+        '''Add a directed edge from v to w in this DGraph.'''
+        if w not in self._dct[v]:
+            self._dct[v].append(w)
+        else:
+            logging.info("The edge from " + str(v) + " to " + str(w) + " is already in this DGraph")
+        
+    def remove_edge(self, v, w):
+        '''Remove the directed edge from v to w in this DGraph.'''
+        if w in self._dct[v]:
+            self._dct[v].remove(w)
+        else:
+            logging.info("The edge from " + str(v) + " to " + str(w) + " is not in this DGraph")
+        
+    def remove_node(self, v):
+        '''Remove node v from this DGraph, and return its successors.'''
+        try:
+            result = self._dct.pop(v, None)
+            for node in self.nodes():
+                if node in self._dct[node]:
+                    self._dct[node].remove(v)
+            return set(result)
+        except KeyError:
+            logging.info("Node " + str(v) + " is not in this Graph")
+            return
+        
+    def successors(self, v):
+        '''Return a set of the successors of node v in this DGraph.'''
+        return set(self._dct[v])
+    
+    def transpose(self):
+        '''Return the transpose of this DGraph (all directed edges are reversed).'''
+        result = DGraph({})
+        for node in self._dct.keys():
+            result.add_node(node)
+        for node in self._dct.keys():
+            for scr in self.successors(node):
+                result.add_edge(scr, node)
+        return result
+                
+
+    def is_connected(self):
+        '''Return whether this DGraph is connected.'''
+        #See if DFS from random node hits every other node
+        if not self._dfs_conn():
+            return False
+        tpose = self.transpose()
+        if not tpose._dfs_conn():
+            return False
+        return True
+            
+        
+    def _dfs_conn(self):
+        s = [random.sample(self.nodes(), 1)[0]]
+        visited = []
+        while s:
+            print(s)
+            curr = s.pop()
+            visited.append(curr)
+            for scr in self.successors(curr):
+                if scr not in visited and scr not in s:
+                    s.append(scr)
+        if set(visited) != self.nodes():
+            return False
+        else:
+            return True
+        
+        
+def NodeError(Exception):
+    '''An Exception for raised trying to access non-existant nodes in a Graph.'''
+    pass
+        
+   
+    
+       
 if __name__ == '__main__':
+    '''
     dct = {'A':['B','C'], 'B':['A', 'C'], 'C':['A', 'B']}
     ug = UGraph(dct)
     ug.add_node('D')
@@ -204,7 +287,29 @@ if __name__ == '__main__':
     ug.add_edge('F', 'E')
     ug.add_edge('E', 'D')
     print(ug.eulerian_circuit('A'))
-'''
+    '''
+    
+    dg = DGraph({})
+    dg.add_node('A')
+    dg.add_node('B')
+    dg.add_node('C')
+    dg.add_node('D')
+    dg.add_node('E')
+    dg.add_node('F')
+    dg.add_edge('A', 'B')
+    dg.add_edge('A', 'F')
+    dg.add_edge('F', 'A')
+    dg.add_edge('B', 'A')
+    dg.add_edge('B', 'C')
+    dg.add_edge('B', 'E')
+    dg.add_edge('C', 'D')
+    dg.add_edge('D', 'C')
+    dg.add_edge('C', 'F')
+    dg.add_edge('F', 'B')
+    dg.add_edge('F', 'E')
+    dg.add_edge('E', 'F')
+    dg.add_edge('E', 'D')
+    print(dg.is_connected())
                    
     
         
